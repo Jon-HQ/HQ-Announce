@@ -1,0 +1,4 @@
+pyqrcode
+pyotp
+pypng
+py-cord
