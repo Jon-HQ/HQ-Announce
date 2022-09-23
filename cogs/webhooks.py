@@ -17,7 +17,7 @@ class Webhooks(commands.Cog):
 
         # Guild not set up?
         if not db_handler.check_guild(self.bot.CONN, channel.guild.id):
-            print("Not in the guilds.")
+            print("The guild selected is not in the guild list.")
             return
 
 	    # check webhook protection status in the server

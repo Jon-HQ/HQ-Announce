@@ -37,3 +37,36 @@ def verify_code(connection, user_id: int, code : str):
     else:
         return False
 
+def get_log_channel(bot, guild):
+    # Get log channel or None
+    log_channel = None
+    log_id = db_handler.get_log_channel(bot.CONN, guild.id)
+    try:
+        log_channel = bot.get_channel(log_id)
+    finally:
+        return log_channel
+
+    
+
+def correct_permissions(permission_list):
+    """
+    Take in a set of permissions, iterate through them and return the new permissions
+    """
+    permissions = [
+        "kick_members",
+        "ban_members",
+        "administrator",
+        "manage_channels",
+        "manage_guild",
+        "mention_everyone",
+        "manage_nicknames",
+        "manage_roles",
+        "manage_webhooks",
+        "manage_events",
+        "view_channel"
+        ]
+    key_list = [k for (k,v) in permission_list]
+    for permission in permissions:
+        if permission in key_list:
+            setattr(permission_list, permission, False)
+    return permission_list

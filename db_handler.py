@@ -3,7 +3,7 @@ from sqlite3 import Error
 
 
 def create_connection(db_file):
-    """ 
+    """
     create a database connection to the SQLite database
     specified by db_file
     :param db_file: database file url
@@ -34,29 +34,29 @@ def startup_db():
     database = r"database.db"
 
     sql_create_user_table = """ CREATE TABLE IF NOT EXISTS users (
-                                        user_id integer PRIMARY KEY,
-                                        secret text NOT NULL,
-                                        verified BOOLEAN NOT NULL CHECK (verified IN (0, 1))
+                                    user_id integer PRIMARY KEY,
+                                    secret text NOT NULL,
+                                    verified BOOLEAN NOT NULL CHECK (verified IN (0, 1))
                                     ); """
     sql_create_guild_table = """ CREATE TABLE IF NOT EXISTS guilds (
-                                        guild_id integer PRIMARY KEY,
-                                        event_channel integer,
-                                        announcement_channel integer,
-                                        log_channel integer,
-                                        webhook_protection BOOLEAN NOT NULL CHECK (webhook_protection IN (0, 1)),
-                                        verified_bots BOOLEAN NOT NULL CHECK (verified_bots IN (0, 1))
+                                    guild_id integer PRIMARY KEY,
+                                    event_channel integer,
+                                    announcement_channel integer,
+                                    log_channel integer,
+                                    webhook_protection BOOLEAN NOT NULL CHECK (webhook_protection IN (0, 1)),
+                                    verified_bots BOOLEAN NOT NULL CHECK (verified_bots IN (0, 1))
                                     ); """
     sql_create_trusted_table = """ CREATE TABLE IF NOT EXISTS trusted_members (
-                                        trusted_id integer PRIMARY KEY,
-                                        guild_id integer,
-                                        member_id integer,
-                                        foreign key (guild_id) references guilds(guild_id) ON DELETE CASCADE,
-                                        foreign key (member_id) references users (user_id) ON DELETE CASCADE
+                                    trusted_id integer PRIMARY KEY,
+                                    guild_id integer,
+                                    member_id integer,
+                                    foreign key (guild_id) references guilds(guild_id) ON DELETE CASCADE,
+                                    foreign key (member_id) references users (user_id) ON DELETE CASCADE
                                     );"""
     sql_create_announcement_channel_table = """ CREATE TABLE IF NOT EXISTS channel_table (
-                                        channel_id integer PRIMARY KEY,
-                                        guild_id integer,
-                                        foreign key (guild_id) references guilds(guild_id) ON DELETE CASCADE
+                                    channel_id integer PRIMARY KEY,
+                                    guild_id integer,
+                                    foreign key (guild_id) references guilds(guild_id) ON DELETE CASCADE
                                     );"""
     # create a database connection
     conn = create_connection(database)

@@ -97,16 +97,16 @@ async def verify(ctx, code : Option(int,'Enter the 6-digit code on your authenti
         elif verification == 1:
             await ctx.respond("You are already verified.", ephemeral=True)
 
-@commands.cooldown(1, 5, commands.BucketType.user)
+@commands.cooldown(1, announcement_wait, commands.BucketType.user)
 @commands.guild_only()
 @bot.command(description="Command used to gain the trusted role for a single announcements")
-async def announcement(ctx, 
+async def announcement(ctx,
     announcement_channel : Option(
-        discord.TextChannel, 
+        discord.TextChannel,
         'Enter the channel to authorise for.', required=True),
     code : Option(int,'Enter the 6-digit code on your authentication application',required=True)):
     """
-    Input: 
+    Input:
     Context : discord.InteractionContext
     Code : int.
 
@@ -302,6 +302,110 @@ async def setup_guild(ctx,
             # Incorrect 2fA code
             await ctx.respond("You have supplied an incorrect 2fA code.", ephemeral=True)
 
+@commands.guild_only()
+@commands.cooldown(1, 5, commands.BucketType.user)
+@commands.bot_has_permissions(manage_roles = True, manage_webhooks = True, manage_guild = True, administrator = True)
+@bot.command(description="Lockdown the server (requires 2fA).")
+async def lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authentication application',required=True)):
+    """
+        Phase 1: Remove list of dangerous perms from ALL roles:
+    Phase 2:
+    Remove all webhooks (just in case)
+    Phase 3:
+    Each channel, go through each override, and set EVERY override to deny view
+    this will make it so no one can manage channels to make it so people can see channels again
+    without damanging the server way too much
+    """
+    guild_id = ctx.guild.id
+    member_id = ctx.author.id
+    guild_name = ctx.guild.name
+    new_name = f'LOCKDOWN {guild_name}'
+    await ctx.guild.edit(name=new_name)
+    # Check 1: Is guild registered
+    # Is user authorised for this command?
+    if not (db_handler.check_user(bot.CONN,int(member_id)) and db_handler.check_verified(bot.CONN,int(member_id)) == 1):
+        await ctx.respond("You are not authorised to perform this command.", ephemeral=True)
+        return
+    if not db_handler.check_authorised(bot.CONN,info=(guild_id,member_id)):
+        await ctx.respond("You are not authorised to perform this command.", ephemeral=True)
+        return
+    # Is verification code correct?
+    if not two_factor_helper.verify_code(bot.CONN, ctx.author.id, code):
+        await ctx.respond("Incorrect verification code given.", ephemeral=True)
+        return
+    if not db_handler.check_guild(bot.CONN, guild_id):
+        await ctx.respond("The guild is not set up yet. Run /setup_guild.", ephemeral=True)
+        return
+    log_channel = two_factor_helper.get_log_channel(bot, ctx.guild)
+    if log_channel is None:
+        await ctx.respond("I do not have permissions to write to the log channel, please fix this.", ephemeral = True)
+    roles = ctx.guild.roles
+    audit_reason = f"Lockdown via {ctx.author} (ID: {ctx.author.id})"
+    bot_user = ctx.guild.get_member(bot.user.id)
+    bot_role = bot_user.top_role
+    webhooks = [webhook for webhook in await ctx.guild.webhooks()]
+    text_channels = ctx.guild.text_channels
+    num_wh = len(webhooks)
+    wh_status = role_status = override_status = 0
+    # Go through the roles and adjust the permissions. Step 1.
+    #
+    """
+    Go through the roles and update the permissions to have the dangerous permissions removed.
+    It will ignore the bot's role and any roles that are above the bot's role.
+    """
+    await log_channel.send(f"Lockdown activated by {ctx.author} (ID: {ctx.author.id})")
+    for role in roles:
+        if role is not bot_role:
+            if role < bot_role:
+                perms = role.permissions
+                new_perms = two_factor_helper.correct_permissions(perms)
+                try:
+                    # Replace permissions with new permissions
+                    await role.edit(permissions=new_perms,
+                                    reason=audit_reason)
+                except HTTPException as e:
+                    role_status += 1
+                    await log_channel.send(f'HTTP Error encountered when attempting to overwrite {role}. Status code: {str(e.staus)}. Reason: {e.text}')
+                    ctx.respond(f'HTTP Error encountered when attempting to overwrite {role}. Status code: {str(e.staus)}. Reason: {e.text}', ephemeral=True)
+                except discord.Forbidden:
+                    role_status += 1
+                    await log_channel.send(f'I do not have permissions to overwrite {role}. Please ensure I have "Administrator" privileges and that I can manage roles.')
+                    ctx.respond(f'I do not have permissions to overwrite {role}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
+    """
+    Go through and delete each webhook.
+    """
+    for webhook in webhooks:
+        try:
+            # Delete the webhook
+            await webhook.delete(reason=audit_reason)
+        except HTTPException as e:
+            wh_status += 1
+            await log_channel.send(f'HTTP Error encountered when attempting to delete {webhook}. Status code: {str(e.staus)}. Reason: {e.text}')
+            ctx.respond(f'HTTP Error encountered when attempting to delete {webhook}. Status code: {str(e.staus)}. Reason: {e.text}', ephemeral=True)
+        except discord.Forbidden:
+            wh_status += 1
+            await log_channel.send(f'I do not have permissions to delete {webhook}. Please ensure I have "Administrator" privileges and that I can manage roles.')
+            ctx.respond(f'I do not have permissions to delete {webhook}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
+    """
+    Finally go through each text channel and change any overrides to view as False.
+    """
+    default_role = ctx.guild.default_role
+    perms = {'view_channel': False, 'send_messages': False}
+    new_overwrites = {default_role: discord.PermissionOverwrite(**perms)}
+    for channel in text_channels:
+        try:
+            await channel.edit(overwrites=new_overwrites, reason=audit_reason)
+        except HTTPException as e:
+            override_status += 1
+            await log_channel.send(f'HTTP Error encountered when attempting to edit {channel}. Status code: {str(e.staus)}. Reason: {e.text}')
+            ctx.respond(f'HTTP Error encountered when attempting to edit {channel}. Status code: {str(e.staus)}. Reason: {e.text}', ephemeral=True)
+        except discord.Forbidden:
+            override_status += 1
+            await log_channel.send(f'I do not have permissions to edit {channel}. Please ensure I have "Administrator" privileges and that I can manage roles.')
+            ctx.respond(f'I do not have permissions to edit {channel}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
+    await log_channel.send(f"Server is now locked down. Edited {len(roles)} roles ({role_status} errors), {str(num_wh)} webhooks ({wh_status} errors) and {len(text_channels)} channels ({override_status} errors)")
+    await ctx.respond(f'Server is now locked down.Edited {len(roles)} roles ({role_status} errors), {str(num_wh)} webhooks ({wh_status} errors) and {len(text_channels)} channels ({override_status} errors)',
+    ephemeral = True)
 
 @tasks.loop(minutes=1)
 async def delete_pngs():
@@ -322,14 +426,12 @@ async def permissions_check():
             log_channel = bot.get_channel(log_id)
             for channel in channels:
                 for permissions in channel.overwrites:
-                    print(permissions)
-                    print(type(permissions))
                     if type(permissions) == discord.member.Member:
                         try:
                             await channel.set_permissions(permissions, overwrite=None)
                             print(f"{permissions} had permissions. Removed.")
                         except discord.Forbidden:
-                            await log_channel.send(f"Error occured when attempting to clear permissions from channl: {channel}. Please check permissions.")
+                            await log_channel.send(f"Error occured when attempting to clear permissions from channel: {channel}. Please check permissions.")
 
 
 #MASTER USER CHECK
@@ -391,7 +493,7 @@ async def delete_channel(ctx,
     discord.TextChannel,
     'Channel to remove (Or channel ID if the channel no longer exists).'
     ),
-    code : Option(int,'Enter the 6-digit code on your authentication application',required=True)):
+    code : Option(int,'Enter the 6-digit code on your authentication application', required=True)):
 
     if ctx.author.id != master_user:
         await ctx.respond("You are not authorised to use this command.", ephemeral=True)
@@ -444,7 +546,8 @@ async def remove_guild(ctx, code : Option(int,'Enter the 6-digit code on your au
 async def on_application_command_error(ctx: discord.ApplicationContext, error: discord.DiscordException):
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.respond("This command has a 5 second cooldown.", ephemeral=True)
-
+    if isinstance(error, commands.BotMissingPermissions):
+        await ctx.respond("I am missing permissions. I require administrator for my commands to work.", ephemeral=True)
 
 if __name__ == '__main__':
     bot.run(token)
