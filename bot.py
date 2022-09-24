@@ -347,7 +347,7 @@ async def lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authen
     bot_user = ctx.guild.get_member(bot.user.id)
     bot_role = bot_user.top_role
     webhooks = [webhook for webhook in await ctx.guild.webhooks()]
-    text_channels = ctx.guild.text_channels
+    channels = Union[ctx.guild.text_channels,ctx.guild.voice_channels]
     num_wh = len(webhooks)
     wh_status = role_status = override_status = 0
     # Go through the roles and adjust the permissions. Step 1.
@@ -396,7 +396,7 @@ async def lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authen
     default_role = ctx.guild.default_role
     perms = {'view_channel': False, 'send_messages': False}
     new_overwrites = {default_role: discord.PermissionOverwrite(**perms)}
-    for channel in text_channels:
+    for channel in channels:
         try:
             await channel.edit(overwrites=new_overwrites, reason=audit_reason)
         except HTTPException as e:
