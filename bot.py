@@ -423,6 +423,7 @@ async def permissions_check():
             log_id = db_handler.get_log_channel(bot.CONN, guild.id)
             log_channel = bot.get_channel(log_id)
             for channel in channels:
+                print(channel.overwrites)
                 for permissions in channel.overwrites:
                     try:
                         await channel.set_permissions(permissions, overwrite=None)
