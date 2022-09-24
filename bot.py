@@ -90,7 +90,7 @@ async def verify(ctx, code : Option(int,'Enter the 6-digit code on your authenti
         elif verification == 1:
             await ctx.respond("You are already verified.", ephemeral=True)
 
-@commands.cooldown(1, announcement_wait, commands.BucketType.user)
+@commands.cooldown(1, 5, commands.BucketType.user)
 @commands.guild_only()
 @bot.command(description="Command used to gain the trusted role for a single announcements")
 async def announcement(ctx,
@@ -143,6 +143,7 @@ async def announcement(ctx,
         await log_channel.send(f"{ctx.author.mention} has invoked the announcements command for channel: {channel}.")
         print(channel.overwrites)
         #Set the overwrites
+        permissions_check.cancel()
         overwrite = discord.PermissionOverwrite()
         overwrite.send_messages = overwrite.mention_everyone = True
         try: # Try set permissions
@@ -184,6 +185,7 @@ async def announcement(ctx,
         except HTTPException as e:
             await ctx.respond("There was an error when executing the command. HTTP Error Code: {}".format(str(e.code)))
             return
+        permissions_check.start()
         await log_channel.send(f"{ctx.author.mention}'s permissions are now revoked.")
 
 # MASTER USER
