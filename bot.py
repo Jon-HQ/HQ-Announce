@@ -425,6 +425,7 @@ async def delete_pngs():
 @tasks.loop(minutes=1)
 async def permissions_check():
     for guild in bot.guilds:
+        members = guild.members
         if db_handler.check_guild(bot.CONN, guild.id):
             channels = [bot.get_channel(channel_id) for channel_id in db_handler.get_channels(bot.CONN, guild.id)]
             log_id = db_handler.get_log_channel(bot.CONN, guild.id)
