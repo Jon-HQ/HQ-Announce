@@ -13,10 +13,10 @@ def setup_and_get_path(ctx, connection):
     Finally, adds the client to the database preliminarily
     """
     secret = pyotp.random_base32()
-    user = f'{ctx.user.name}#{ctx.user.discriminator}'
-    user_for_path = f'{ctx.user.name}{str(random.randint(0,9999))}'
+    filesys = pyotp.random_base32()
+    user_for_path = f'{str(filesys)}'
     user_id = int(f'{ctx.user.id}')
-    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=user, issuer_name="2fA Discord Bot")
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(name="Discord Announcement", issuer_name="HQ Announcements")
     qr_code = pyqrcode.create(uri, error='L')
     png_path = f'./qr_codes/QR-{user_for_path}.png'
     qr_code.png(png_path, scale=6)
