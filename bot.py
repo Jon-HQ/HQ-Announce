@@ -347,7 +347,7 @@ async def lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authen
     bot_user = ctx.guild.get_member(bot.user.id)
     bot_role = bot_user.top_role
     webhooks = [webhook for webhook in await ctx.guild.webhooks()]
-    channels = Union[ctx.guild.text_channels,ctx.guild.voice_channels]
+    channels = ctx.guild.channels
     num_wh = len(webhooks)
     wh_status = role_status = override_status = 0
     # Go through the roles and adjust the permissions. Step 1.
@@ -358,55 +358,57 @@ async def lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authen
     """
     await ctx.respond(f"Lockdown activated by {ctx.author} (ID: {ctx.author.id})")
     await log_channel.send(f"Lockdown activated by {ctx.author} (ID: {ctx.author.id})")
-    for role in roles:
-        if role is not bot_role:
-            if role < bot_role:
-                perms = role.permissions
-                new_perms = two_factor_helper.correct_permissions(perms)
-                try:
-                    # Replace permissions with new permissions
-                    await role.edit(permissions=new_perms,
-                                    reason=audit_reason)
-                except HTTPException as e:
-                    role_status += 1
-                    await log_channel.send(f'HTTP Error encountered when attempting to overwrite {role}. Status code: {str(e.staus)}. Reason: {e.text}')
-                    ctx.respond(f'HTTP Error encountered when attempting to overwrite {role}. Status code: {str(e.staus)}. Reason: {e.text}', ephemeral=True)
-                except discord.Forbidden:
-                    role_status += 1
-                    await log_channel.send(f'I do not have permissions to overwrite {role}. Please ensure I have "Administrator" privileges and that I can manage roles.')
-                    ctx.respond(f'I do not have permissions to overwrite {role}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
-    """
-    Go through and delete each webhook.
-    """
-    for webhook in webhooks:
-        try:
-            # Delete the webhook
-            await webhook.delete(reason=audit_reason)
-        except HTTPException as e:
-            wh_status += 1
-            await log_channel.send(f'HTTP Error encountered when attempting to delete {webhook}. Status code: {str(e.staus)}. Reason: {e.text}')
-            ctx.respond(f'HTTP Error encountered when attempting to delete {webhook}. Status code: {str(e.staus)}. Reason: {e.text}', ephemeral=True)
-        except discord.Forbidden:
-            wh_status += 1
-            await log_channel.send(f'I do not have permissions to delete {webhook}. Please ensure I have "Administrator" privileges and that I can manage roles.')
-            ctx.respond(f'I do not have permissions to delete {webhook}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
-    """
-    Finally go through each text channel and change any overrides to view as False.
-    """
-    default_role = ctx.guild.default_role
-    perms = {'view_channel': False, 'send_messages': False}
-    new_overwrites = {default_role: discord.PermissionOverwrite(**perms)}
-    for channel in channels:
-        try:
-            await channel.edit(overwrites=new_overwrites, reason=audit_reason)
-        except HTTPException as e:
-            override_status += 1
-            await log_channel.send(f'HTTP Error encountered when attempting to edit {channel}. Status code: {str(e.staus)}. Reason: {e.text}')
-            ctx.respond(f'HTTP Error encountered when attempting to edit {channel}. Status code: {str(e.staus)}. Reason: {e.text}', ephemeral=True)
-        except discord.Forbidden:
-            override_status += 1
-            await log_channel.send(f'I do not have permissions to edit {channel}. Please ensure I have "Administrator" privileges and that I can manage roles.')
-            ctx.respond(f'I do not have permissions to edit {channel}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
+    for i in range(3):
+        for role in roles:
+            if role is not bot_role:
+                if role < bot_role:
+                    perms = role.permissions
+                    new_perms = two_factor_helper.correct_permissions(perms)
+                    try:
+                        # Replace permissions with new permissions
+                        await role.edit(permissions=new_perms,
+                                        reason=audit_reason)
+                    except HTTPException as e:
+                        role_status += 1
+                        await log_channel.send(f'HTTP Error encountered when attempting to overwrite {role}. Status code: {str(e.staus)}. Reason: {e.text}')
+                        ctx.respond(f'HTTP Error encountered when attempting to overwrite {role}. Status code: {str(e.staus)}. Reason: {e.text}', ephemeral=True)
+                    except discord.Forbidden:
+                        role_status += 1
+                        await log_channel.send(f'I do not have permissions to overwrite {role}. Please ensure I have "Administrator" privileges and that I can manage roles.')
+                        ctx.respond(f'I do not have permissions to overwrite {role}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
+        """
+        Go through and delete each webhook.
+        """
+        for webhook in webhooks:
+            try:
+                # Delete the webhook
+                await webhook.delete(reason=audit_reason)
+            except HTTPException as e:
+                wh_status += 1
+                await log_channel.send(f'HTTP Error encountered when attempting to delete {webhook}. Status code: {str(e.staus)}. Reason: {e.text}')
+                ctx.respond(f'HTTP Error encountered when attempting to delete {webhook}. Status code: {str(e.staus)}. Reason: {e.text}', ephemeral=True)
+            except discord.Forbidden:
+                wh_status += 1
+                await log_channel.send(f'I do not have permissions to delete {webhook}. Please ensure I have "Administrator" privileges and that I can manage roles.')
+                ctx.respond(f'I do not have permissions to delete {webhook}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
+        """
+        Finally go through each text channel and change any overrides to view as False.
+        """
+        default_role = ctx.guild.default_role
+        perms = {'view_channel': False, 'send_messages': False}
+        new_overwrites = {default_role: discord.PermissionOverwrite(**perms)}
+        for channel in channels:
+            try:
+                await channel.edit(overwrites=new_overwrites, reason=audit_reason)
+            except HTTPException as e:
+                override_status += 1
+                await log_channel.send(f'HTTP Error encountered when attempting to edit {channel}. Status code: {str(e.staus)}. Reason: {e.text}')
+                ctx.respond(f'HTTP Error encountered when attempting to edit {channel}. Status code: {str(e.staus)}. Reason: {e.text}', ephemeral=True)
+            except discord.Forbidden:
+                override_status += 1
+                await log_channel.send(f'I do not have permissions to edit {channel}. Please ensure I have "Administrator" privileges and that I can manage roles.')
+                ctx.respond(f'I do not have permissions to edit {channel}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
+        asyncio.sleep(5)
     await log_channel.send(f"Server is now locked down. Edited {len(roles)} roles ({role_status} errors), {str(num_wh)} webhooks ({wh_status} errors) and {len(text_channels)} channels ({override_status} errors)")
 
 @tasks.loop(minutes=1)
