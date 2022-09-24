@@ -322,10 +322,8 @@ async def lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authen
     member_id = ctx.author.id
     guild_name = ctx.guild.name
     new_name = f'LOCKDOWN {guild_name}'
-    try:
+    if len(new_name) >= 32:
         await ctx.guild.edit(name=new_name)
-    except Exception as e:
-        print(e)
     # Check 1: Is guild registered
     # Is user authorised for this command?
     if not (db_handler.check_user(bot.CONN,int(member_id)) and db_handler.check_verified(bot.CONN,int(member_id)) == 1):
@@ -358,6 +356,7 @@ async def lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authen
     Go through the roles and update the permissions to have the dangerous permissions removed.
     It will ignore the bot's role and any roles that are above the bot's role.
     """
+    await ctx.respond(f"Lockdown activated by {ctx.author} (ID: {ctx.author.id})")
     await log_channel.send(f"Lockdown activated by {ctx.author} (ID: {ctx.author.id})")
     for role in roles:
         if role is not bot_role:
@@ -409,8 +408,6 @@ async def lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authen
             await log_channel.send(f'I do not have permissions to edit {channel}. Please ensure I have "Administrator" privileges and that I can manage roles.')
             ctx.respond(f'I do not have permissions to edit {channel}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
     await log_channel.send(f"Server is now locked down. Edited {len(roles)} roles ({role_status} errors), {str(num_wh)} webhooks ({wh_status} errors) and {len(text_channels)} channels ({override_status} errors)")
-    await ctx.respond(f'Server is now locked down.Edited {len(roles)} roles ({role_status} errors), {str(num_wh)} webhooks ({wh_status} errors) and {len(text_channels)} channels ({override_status} errors)',
-    ephemeral = True)
 
 @tasks.loop(minutes=1)
 async def delete_pngs():

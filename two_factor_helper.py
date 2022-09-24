@@ -31,7 +31,6 @@ def verify_code(connection, user_id: int, code : str):
     code = "{0:06d}".format(code)
     secret = db_handler.get_secret(conn=connection, user_id=user_id)
     totp = pyotp.TOTP(secret)
-    print(type(totp))
     if totp.verify(code):
         return True
     else:
