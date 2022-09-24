@@ -90,7 +90,7 @@ async def verify(ctx, code : Option(int,'Enter the 6-digit code on your authenti
         elif verification == 1:
             await ctx.respond("You are already verified.", ephemeral=True)
 
-@commands.cooldown(1, 5, commands.BucketType.user)
+@commands.cooldown(1, announcement_wait, commands.BucketType.user)
 @commands.guild_only()
 @bot.command(description="Command used to gain the trusted role for a single announcements")
 async def announcement(ctx,
@@ -430,6 +430,16 @@ async def permissions_check():
                             print(f"{permissions} had permissions. Removed.")
                         except discord.Forbidden:
                             await log_channel.send(f"Error occured when attempting to clear permissions from channel: {channel}. Please check permissions.")
+@permissions_check.before_loop
+async def before_perms_check():
+    print('Waiting for bot to be ready to start permissions loop.')
+    await bot.wait_until_ready()
+
+@delete_pngs.before_loop
+async def before_png_delete():
+    print('Waiting for bot to be ready to start png delete loop.')
+    await bot.wait_until_ready()
+
 
 
 #MASTER USER CHECK
