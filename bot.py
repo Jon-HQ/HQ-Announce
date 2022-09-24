@@ -424,12 +424,11 @@ async def permissions_check():
             log_channel = bot.get_channel(log_id)
             for channel in channels:
                 for permissions in channel.overwrites:
-                    if type(permissions) == discord.member.Member:
-                        try:
-                            await channel.set_permissions(permissions, overwrite=None)
-                            print(f"{permissions} had permissions. Removed.")
-                        except discord.Forbidden:
-                            await log_channel.send(f"Error occured when attempting to clear permissions from channel: {channel}. Please check permissions.")
+                    try:
+                        await channel.set_permissions(permissions, overwrite=None)
+                        print(f"{permissions} had permissions. Removed.")
+                    except discord.Forbidden:
+                        await log_channel.send(f"Error occured when attempting to clear permissions from channel: {channel}. Please check permissions.")
 @permissions_check.before_loop
 async def before_perms_check():
     print('Waiting for bot to be ready to start permissions loop.')
