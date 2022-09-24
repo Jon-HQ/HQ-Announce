@@ -48,13 +48,6 @@ class DiscordBot(discord.Bot):
 bot = DiscordBot()
 bot.load_extension("cogs.webhooks")
 
-
-@bot.command()
-async def reload(ctx):
-    # Reloads the file, thus updating the Cog class.
-    bot.reload_extension("cogs.webhooks")
-    await ctx.respond("Webhooks reloaded", ephemeral=True)
-
 @bot.command(description="Command used to start the 2fA pairing setup. Requires Authy/Google Authenticator.")
 async def setup(ctx):
     """
@@ -320,7 +313,10 @@ async def lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authen
     member_id = ctx.author.id
     guild_name = ctx.guild.name
     new_name = f'LOCKDOWN {guild_name}'
-    await ctx.guild.edit(name=new_name)
+    try:
+        await ctx.guild.edit(name=new_name)
+    except Exception as e:
+        print(e)
     # Check 1: Is guild registered
     # Is user authorised for this command?
     if not (db_handler.check_user(bot.CONN,int(member_id)) and db_handler.check_verified(bot.CONN,int(member_id)) == 1):
