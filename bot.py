@@ -19,6 +19,11 @@ token = config['token']
 master_user = config['master_user_id']
 announcement_wait = config['announcement_role_lifetime']
 class DiscordBot(discord.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.members = True
+        super().__init__(intents = intents)
+
     async def on_ready(self):
         print(f'Logged in as {self.user.name}')
         print("----------------------------")
@@ -44,16 +49,8 @@ class DiscordBot(discord.Bot):
         embed.set_footer(text='Protected by Server Supervisor', icon_url='https://i.imgur.com/xCTOwPj.png')
         return embed
 
-
 bot = DiscordBot()
 bot.load_extension("cogs.webhooks")
-
-
-@bot.command()
-async def reload(ctx):
-    # Reloads the file, thus updating the Cog class.
-    bot.reload_extension("cogs.webhooks")
-    await ctx.respond("Webhooks reloaded", ephemeral=True)
 
 @bot.command(description="Command used to start the 2fA pairing setup. Requires Authy/Google Authenticator.")
 async def setup(ctx):
@@ -150,6 +147,7 @@ async def announcement(ctx,
         await log_channel.send(f"{ctx.author.mention} has invoked the announcements command for channel: {channel}.")
         print(channel.overwrites)
         #Set the overwrites
+        permissions_check.cancel()
         overwrite = discord.PermissionOverwrite()
         overwrite.send_messages = overwrite.mention_everyone = True
         try: # Try set permissions
@@ -191,6 +189,7 @@ async def announcement(ctx,
         except HTTPException as e:
             await ctx.respond("There was an error when executing the command. HTTP Error Code: {}".format(str(e.code)))
             return
+        permissions_check.start()
         await log_channel.send(f"{ctx.author.mention}'s permissions are now revoked.")
 
 # MASTER USER
@@ -320,7 +319,10 @@ async def lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authen
     member_id = ctx.author.id
     guild_name = ctx.guild.name
     new_name = f'LOCKDOWN {guild_name}'
-    await ctx.guild.edit(name=new_name)
+    try:
+        await ctx.guild.edit(name=new_name)
+    except Exception as e:
+        print(e)
     # Check 1: Is guild registered
     # Is user authorised for this command?
     if not (db_handler.check_user(bot.CONN,int(member_id)) and db_handler.check_verified(bot.CONN,int(member_id)) == 1):
@@ -420,18 +422,29 @@ async def delete_pngs():
 @tasks.loop(minutes=1)
 async def permissions_check():
     for guild in bot.guilds:
+        members = guild.members
         if db_handler.check_guild(bot.CONN, guild.id):
             channels = [bot.get_channel(channel_id) for channel_id in db_handler.get_channels(bot.CONN, guild.id)]
             log_id = db_handler.get_log_channel(bot.CONN, guild.id)
             log_channel = bot.get_channel(log_id)
             for channel in channels:
+                print(channel.overwrites)
                 for permissions in channel.overwrites:
-                    if type(permissions) == discord.member.Member:
-                        try:
-                            await channel.set_permissions(permissions, overwrite=None)
-                            print(f"{permissions} had permissions. Removed.")
-                        except discord.Forbidden:
-                            await log_channel.send(f"Error occured when attempting to clear permissions from channel: {channel}. Please check permissions.")
+                    try:
+                        await channel.set_permissions(permissions, overwrite=None)
+                        print(f"{permissions} had permissions. Removed.")
+                    except discord.Forbidden:
+                        await log_channel.send(f"Error occured when attempting to clear permissions from channel: {channel}. Please check permissions.")
+@permissions_check.before_loop
+async def before_perms_check():
+    print('Waiting for bot to be ready to start permissions loop.')
+    await bot.wait_until_ready()
+
+@delete_pngs.before_loop
+async def before_png_delete():
+    print('Waiting for bot to be ready to start png delete loop.')
+    await bot.wait_until_ready()
+
 
 
 #MASTER USER CHECK
