@@ -22,6 +22,9 @@ class DiscordBot(discord.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.members = True
+        intents.guilds = True
+        intents.webhooks = True
+        intents.messages = True
         super().__init__(intents = intents)
 
     async def on_ready(self):
@@ -422,7 +425,6 @@ async def delete_pngs():
 @tasks.loop(minutes=1)
 async def permissions_check():
     for guild in bot.guilds:
-        members = guild.members
         if db_handler.check_guild(bot.CONN, guild.id):
             channels = [bot.get_channel(channel_id) for channel_id in db_handler.get_channels(bot.CONN, guild.id)]
             log_id = db_handler.get_log_channel(bot.CONN, guild.id)
@@ -430,11 +432,12 @@ async def permissions_check():
             for channel in channels:
                 print(channel.overwrites)
                 for permissions in channel.overwrites:
-                    try:
-                        await channel.set_permissions(permissions, overwrite=None)
-                        print(f"{permissions} had permissions. Removed.")
-                    except discord.Forbidden:
-                        await log_channel.send(f"Error occured when attempting to clear permissions from channel: {channel}. Please check permissions.")
+                    if type(permissions) == discord.member.Member:
+                        try:
+                            await channel.set_permissions(permissions, overwrite=None)
+                            print(f"{permissions} had permissions. Removed.")
+                        except discord.Forbidden:
+                            await log_channel.send(f"Error occured when attempting to clear permissions from channel: {channel}. Please check permissions.")
 @permissions_check.before_loop
 async def before_perms_check():
     print('Waiting for bot to be ready to start permissions loop.')
