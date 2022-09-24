@@ -19,6 +19,11 @@ token = config['token']
 master_user = config['master_user_id']
 announcement_wait = config['announcement_role_lifetime']
 class DiscordBot(discord.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.members = True
+        super().__init__(intents = intents)
+
     async def on_ready(self):
         print(f'Logged in as {self.user.name}')
         print("----------------------------")
@@ -43,7 +48,6 @@ class DiscordBot(discord.Bot):
         embed.add_field(name='Action', value=action_str, inline=False)
         embed.set_footer(text='Protected by Server Supervisor', icon_url='https://i.imgur.com/xCTOwPj.png')
         return embed
-
 
 bot = DiscordBot()
 bot.load_extension("cogs.webhooks")
@@ -418,6 +422,7 @@ async def delete_pngs():
 @tasks.loop(minutes=1)
 async def permissions_check():
     for guild in bot.guilds:
+        members = guild.members
         if db_handler.check_guild(bot.CONN, guild.id):
             channels = [bot.get_channel(channel_id) for channel_id in db_handler.get_channels(bot.CONN, guild.id)]
             log_id = db_handler.get_log_channel(bot.CONN, guild.id)
