@@ -148,7 +148,10 @@ async def announce(ctx,
         channel = bot.get_channel(announcement_channel.id)
         vc_channel = bot.get_channel(voice_channel_id)
         log_channel = bot.get_channel(log_channel_id)
-        await log_channel.send(f"{ctx.author} has invoked the announce command for channel: {channel}.")
+        if log_channel is None:
+            await ctx.respond("There is no log channel for this server.", ephemeral=True)
+        if log_channel is not None:
+            await log_channel.send(f"{ctx.author} has invoked the announce command for channel: {channel}.")
         print(channel.overwrites)
         #Set the overwrites
         permissions_check.cancel()
@@ -173,7 +176,8 @@ async def announce(ctx,
         except HTTPException as e:
             await ctx.respond("There was an error when setting the manage_events permission. HTTP Error Code: {}".format(str(e.code)))
             return
-        await log_channel.send(f"{ctx.author} has elevated permissions (Manage events, send messages, and mention everyone in the announcements channel) for {str(announcement_wait)} seconds.")
+        if log_channel is not None:
+            await log_channel.send(f"{ctx.author} has elevated permissions (Manage events, send messages, and mention everyone in the announcements channel) for {str(announcement_wait)} seconds.")
         # Wait x seconds
         await asyncio.sleep(int(announcement_wait))
         # Rewrite the overwrites
@@ -194,7 +198,10 @@ async def announce(ctx,
             await ctx.respond("There was an error when executing the command. HTTP Error Code: {}".format(str(e.code)))
             return
         permissions_check.start()
-        await log_channel.send(f"{ctx.author}'s permissions are now revoked.")
+        if log_channel is not None:
+            await log_channel.send(f"{ctx.author}'s permissions are now revoked.")
+        else:
+            await ctx.respond("Your permissions are now revoked.", ephemeral=True)
 
 # MASTER USER
 @commands.cooldown(1, 5, commands.BucketType.user)
@@ -229,13 +236,16 @@ async def auth(ctx, member : Option(discord.Member, "User to authorize:"), code 
             db_handler.authorise_member(conn=bot.CONN,info=(ctx.guild.id, member.id))
             log = db_handler.get_log_channel(bot.CONN, ctx.guild.id)
             lg = bot.get_channel(log)
-            try:
-                await lg.send(f'{member.mention} authorized for the server: {str(ctx.guild.id)}')
-            except HTTPException:
-                await ctx.author.send("Member authorized, however I was unable to send a message to {} due to a connection issue.".format(lg))
-            except discord.Forbidden:
-                await ctx.author.send("Member authorized, however I do not have permissions to post in log channel:{}. Please let me read/write messages there.".format(lg))
-            await ctx.respond(f'{member.name} authorized for guild: {str(ctx.guild.id)}', ephemeral=True)
+            if lg is None:
+                await ctx.respond(f'{member} is now authorised. No log channel is found for this server.', ephemeral=True)
+            else:
+                try:
+                    await lg.send(f'{member.mention} authorized for the server: {str(ctx.guild.id)}')
+                except HTTPException:
+                    await ctx.author.send("Member authorized, however I was unable to send a message to {} due to a connection issue.".format(lg))
+                except discord.Forbidden:
+                    await ctx.author.send("Member authorized, however I do not have permissions to post in log channel:{}. Please let me read/write messages there.".format(lg))
+                await ctx.respond(f'{member.name} authorized for guild: {str(ctx.guild.id)}', ephemeral=True)
         except Exception as e:
             # Catch exceptions
             print(e)
@@ -309,7 +319,7 @@ async def setup_guild(ctx,
 @commands.cooldown(1, 5, commands.BucketType.user)
 @commands.bot_has_permissions(manage_roles = True, manage_webhooks = True, manage_guild = True, administrator = True)
 @bot.command(description="ONLY USE IF UNDER ATTACK. DO NOT TEST. WILL CAUSE DAMAGE TO SERVER.")
-async def panic_DANGEROUS_lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authentication application.',required=True)):
+async def panic_dangerous_lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authentication application.',required=True)):
     """
         Phase 1: Remove list of dangerous perms from ALL roles:
     Phase 2:
@@ -323,7 +333,7 @@ async def panic_DANGEROUS_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
     member_id = ctx.author.id
     guild_name = ctx.guild.name
     new_name = f'LOCKDOWN {guild_name}'
-    if len(new_name) >= 32:
+    if len(new_name) <= 32:
         await ctx.guild.edit(name=new_name)
     # Check 1: Is guild registered
     # Is user authorised for this command?
@@ -340,6 +350,7 @@ async def panic_DANGEROUS_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
     if not db_handler.check_guild(bot.CONN, guild_id):
         await ctx.respond("The guild is not set up yet. Run /setup_guild.", ephemeral=True)
         return
+    print(":D")
     log_channel = two_factor_helper.get_log_channel(bot, ctx.guild)
     if log_channel is None:
         await ctx.respond("I do not have permissions to write to the log channel, please fix this.", ephemeral = True)
@@ -357,9 +368,11 @@ async def panic_DANGEROUS_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
     Go through the roles and update the permissions to have the dangerous permissions removed.
     It will ignore the bot's role and any roles that are above the bot's role.
     """
-    await ctx.respond(f"Lockdown activated by {ctx.author} (ID: {ctx.author.id})")
-    await log_channel.send(f"Lockdown activated by {ctx.author} (ID: {ctx.author.id})")
+    await ctx.respond(f"Lockdown activated by {ctx.author} (ID: {ctx.author.id})", ephemeral=True)
+    if log_channel is not None:
+        await log_channel.send(f"Lockdown activated by {ctx.author} (ID: {ctx.author.id})")
     for i in range(3):
+        print(i)
         for role in roles:
             if role is not bot_role:
                 if role < bot_role:
@@ -371,11 +384,13 @@ async def panic_DANGEROUS_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
                                         reason=audit_reason)
                     except HTTPException as e:
                         role_status += 1
-                        await log_channel.send(f'HTTP Error encountered when attempting to overwrite {role}. Status code: {str(e.staus)}. Reason: {e.text}')
+                        if log_channel is None:
+                            await log_channel.send(f'HTTP Error encountered when attempting to overwrite {role}. Status code: {str(e.staus)}. Reason: {e.text}')
                         ctx.respond(f'HTTP Error encountered when attempting to overwrite {role}. Status code: {str(e.staus)}. Reason: {e.text}', ephemeral=True)
                     except discord.Forbidden:
                         role_status += 1
-                        await log_channel.send(f'I do not have permissions to overwrite {role}. Please ensure I have "Administrator" privileges and that I can manage roles.')
+                        if log_channel is None:
+                            await log_channel.send(f'I do not have permissions to overwrite {role}. Please ensure I have "Administrator" privileges and that I can manage roles.')
                         ctx.respond(f'I do not have permissions to overwrite {role}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
         """
         Go through and delete each webhook.
@@ -386,11 +401,13 @@ async def panic_DANGEROUS_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
                 await webhook.delete(reason=audit_reason)
             except HTTPException as e:
                 wh_status += 1
-                await log_channel.send(f'HTTP Error encountered when attempting to delete {webhook}. Status code: {str(e.staus)}. Reason: {e.text}')
+                if log_channel is None:
+                    await log_channel.send(f'HTTP Error encountered when attempting to delete {webhook}. Status code: {str(e.staus)}. Reason: {e.text}')
                 ctx.respond(f'HTTP Error encountered when attempting to delete {webhook}. Status code: {str(e.staus)}. Reason: {e.text}', ephemeral=True)
             except discord.Forbidden:
                 wh_status += 1
-                await log_channel.send(f'I do not have permissions to delete {webhook}. Please ensure I have "Administrator" privileges and that I can manage roles.')
+                if log_channel is None:
+                    await log_channel.send(f'I do not have permissions to delete {webhook}. Please ensure I have "Administrator" privileges and that I can manage roles.')
                 ctx.respond(f'I do not have permissions to delete {webhook}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
         """
         Finally go through each text channel and change any overrides to view as False.
@@ -403,14 +420,19 @@ async def panic_DANGEROUS_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
                 await channel.edit(overwrites=new_overwrites, reason=audit_reason)
             except HTTPException as e:
                 override_status += 1
-                await log_channel.send(f'HTTP Error encountered when attempting to edit {channel}. Status code: {str(e.staus)}. Reason: {e.text}')
+                if log_channel is None:
+                    await log_channel.send(f'HTTP Error encountered when attempting to edit {channel}. Status code: {str(e.staus)}. Reason: {e.text}')
                 ctx.respond(f'HTTP Error encountered when attempting to edit {channel}. Status code: {str(e.staus)}. Reason: {e.text}', ephemeral=True)
             except discord.Forbidden:
                 override_status += 1
-                await log_channel.send(f'I do not have permissions to edit {channel}. Please ensure I have "Administrator" privileges and that I can manage roles.')
+                if log_channel is None:
+                    await log_channel.send(f'I do not have permissions to edit {channel}. Please ensure I have "Administrator" privileges and that I can manage roles.')
                 ctx.respond(f'I do not have permissions to edit {channel}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
-        asyncio.sleep(5)
-    await log_channel.send(f"Server is now locked down. Edited {len(roles)} roles ({role_status} errors), {str(num_wh)} webhooks ({wh_status} errors) and {len(text_channels)} channels ({override_status} errors)")
+        await asyncio.sleep(5)
+    if log_channel is not None:
+        await log_channel.send(f"Server is now locked down. Edited {len(roles)} roles ({role_status} errors), {str(num_wh)} webhooks ({wh_status} errors) and {len(channels)} channels ({override_status} errors)")
+    else:
+        await ctx.respond(f"Server is now locked down. Edited {len(roles)} roles ({role_status} errors), {str(num_wh)} webhooks ({wh_status} errors) and {len(channels)} channels ({override_status} errors)", ephemeral = True)
 
 @tasks.loop(minutes=1)
 async def delete_pngs():
@@ -425,7 +447,6 @@ async def delete_pngs():
 @tasks.loop(minutes=1)
 async def permissions_check():
     for guild in bot.guilds:
-        members = guild.members
         if db_handler.check_guild(bot.CONN, guild.id):
             channels = [bot.get_channel(channel_id) for channel_id in db_handler.get_channels(bot.CONN, guild.id)]
             log_id = db_handler.get_log_channel(bot.CONN, guild.id)
@@ -455,7 +476,7 @@ async def before_png_delete():
 @commands.guild_only()
 @commands.cooldown(1, 5, commands.BucketType.user)
 @bot.command(description="Reset user's 2FA")
-async def reset(ctx, code : Option(int,'Enter the 6-digit code on your authentication application.',required=True), member : Option(discord.Member,'The member to reset (or yourself).', required=False, default=None)):
+async def reset(ctx, code : Option(int,'Enter the 6-digit code on your authentication application.',required=True), member : Option(discord.Member,'The member to reset (or yourself).', required=True)):
     if ctx.author.id != master_user:
         await ctx.respond("You are not authorized to use this command.", ephemeral=True)
         return
@@ -465,13 +486,13 @@ async def reset(ctx, code : Option(int,'Enter the 6-digit code on your authentic
     if not two_factor_helper.verify_code(bot.CONN, ctx.author.id, code):
         await ctx.respond("Incorrect code given.",ephemeral=True)
         return
-    if member is None:
-        user_id = ctx.author.id
-    else:
-        user_id = member.id
+    user_id = member.id
+    print(user_id)
     if db_handler.check_user(bot.CONN,user_id):
-        db_handler.delete_user(bot.CONN, user_id)
-        await ctx.respond(f"{user_id} deleted from the database.", ephemeral=True)
+        try:
+            db_handler.delete_user(bot.CONN, user_id)
+        finally:
+            await ctx.respond(f"{user_id} deleted from the database.", ephemeral=True)
     else:
         await ctx.respond("User not found in the database.", ephemeral=True)
 
@@ -497,7 +518,8 @@ async def insert_channel(ctx, announcement_channel : Option(Union[discord.TextCh
 
     if announcement_channel.id not in [channel_id for channel_id in db_handler.get_channels(bot.CONN, ctx.guild.id)]:
         db_handler.insert_channel(bot.CONN, (announcement_channel.id, guild_id))
-        await lg.send(f'Channel "{announcement_channel}" added to the database for guild by {ctx.author.mention}')
+        if lg is not None:
+            await lg.send(f'Channel "{announcement_channel}" added to the database for guild by {ctx.author.mention}')
         await ctx.respond(f'Channel "{announcement_channel}" added to the database for guild', ephemeral=True)
     else:
         await ctx.respond(f'Channel "{announcement_channel}" is already in the database.', ephemeral=True)
@@ -506,8 +528,7 @@ async def insert_channel(ctx, announcement_channel : Option(Union[discord.TextCh
 @commands.cooldown(1, 5, commands.BucketType.user)
 @bot.command(description="Delete a channel from the database")
 async def delete_channel(ctx, 
-    channel : Option(
-    Option(Union[discord.TextChannel,discord.VoiceChannel],
+    channel : Option(Union[discord.TextChannel,discord.VoiceChannel],
     'Channel to remove (Or channel ID if the channel no longer exists).'
     ),
     code : Option(int,'Enter the 6-digit code on your authentication application.', required=True)):
@@ -531,7 +552,8 @@ async def delete_channel(ctx,
     if channel.id in [channel_id for channel_id in db_handler.get_channels(bot.CONN, ctx.guild.id)]:
         db_handler.delete_channel(bot.CONN, channel.id)
         await ctx.respond(f'{channel} successfully removed from the database', ephemeral=True)
-        await lg.send(f'{channel} was removed from the database by {ctx.author.mention}')
+        if lg is not None:
+            await lg.send(f'{channel} was removed from the database by {ctx.author.mention}')
     else:
         await ctx.respond(f'{channel} was not found in the database.', ephemeral=True)
 
@@ -556,7 +578,8 @@ async def remove_guild(ctx, code : Option(int,'Enter the 6-digit code on your au
         log = db_handler.get_log_channel(bot.CONN, guild_id)
         lg = bot.get_channel(log)
         db_handler.delete_guild(bot.CONN, guild_id)
-        await lg.send(f'{ctx.guild} was removed from the database by {ctx.author.mention}')
+        if lg is not None:
+            await lg.send(f'{ctx.guild} was removed from the database by {ctx.author.mention}')
         await ctx.respond("Guild successfully reset.", ephemeral=True)
 
 @bot.event
