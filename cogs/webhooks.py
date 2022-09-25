@@ -22,7 +22,7 @@ class Webhooks(commands.Cog):
 
 	    # check webhook protection status in the server
         if not db_handler.check_webhook(self.bot.CONN, channel.guild.id):
-            print("No webhook protection")
+            print("No webhook protection.")
             return
 
 	# find the server's log channel
@@ -42,7 +42,7 @@ class Webhooks(commands.Cog):
                 return
             recent_webhook = webhooks[-1]
         except:
-            embed = await self.bot.build_log_embed(0xe74c3c, None, channel, '❌ FAILED TO DELETE - MISSING PERMISSIONS')
+            embed = await self.bot.build_log_embed(0xe74c3c, None, channel, '❌ FAILED TO DELETE - MISSING PERMISSIONS.')
             await log_channel.send(embed=embed)
             return
 
@@ -56,7 +56,7 @@ class Webhooks(commands.Cog):
 	# # check to see if the webhook was created by a verified bot
         if db_handler.check_verified_bots(self.bot.CONN, channel.guild.id):
             if recent_webhook.user.public_flags.verified_bot:
-                embed = await self.bot.build_log_embed(0x2ecc71, recent_webhook.user, channel, '✅ Verified bot - no action')
+                embed = await self.bot.build_log_embed(0x2ecc71, recent_webhook.user, channel, '✅ Verified Bot - No action taken.')
                 await log_channel.send(embed=embed)
                 return
 
@@ -64,12 +64,12 @@ class Webhooks(commands.Cog):
         try:
             await recent_webhook.delete(reason='Webhook protection')
         except:
-            embed = await self.bot.build_log_embed(0xe74c3c, recent_webhook.user, channel, '❌ FAILED TO DELETE - MISSING PERMISSIONS')
+            embed = await self.bot.build_log_embed(0xe74c3c, recent_webhook.user, channel, '❌ FAILED TO DELETE - MISSING PERMISSIONS.')
             await log_channel.send(embed=embed)
             return
 
         # log the webhook deletion
-        embed = await self.bot.build_log_embed(0xf1c40f, recent_webhook.user, channel, '✅ Webhook deleted')
+        embed = await self.bot.build_log_embed(0xf1c40f, recent_webhook.user, channel, '✅ Webhook deleted.')
         await log_channel.send(embed=embed)
         return
 
@@ -80,7 +80,7 @@ class Webhooks(commands.Cog):
     code : Option(int,'Enter the 6-digit code on your authentication application',required=True),
     verified_bots : Option(
         description="Allow verified bots?",
-        choices = ['Yes','No']
+        choices = ['True','False']
     )):
         if ctx.author.id != self.bot.master_user:
             await ctx.respond("You are not authorised to use this command.", ephemeral=True)
@@ -94,7 +94,7 @@ class Webhooks(commands.Cog):
         if not db_handler.check_guild(self.bot.CONN, ctx.guild.id):
             await ctx.respond("The guild is not set up yet. Run /setup_guild.", ephemeral=True)
             return
-        bot_bool = 1 if verified_bots == 'Yes' else 0
+        bot_bool = 1 if verified_bots == 'True' else 0
         print(bot_bool)
         log = db_handler.get_log_channel(self.bot.CONN, ctx.guild.id)
         lg = self.bot.get_channel(log)
@@ -121,7 +121,7 @@ class Webhooks(commands.Cog):
         log = db_handler.get_log_channel(self.bot.CONN, ctx.guild.id)
         lg = self.bot.get_channel(log)
         db_handler.set_webhook_parameters(self.bot.CONN, (0,0,ctx.guild.id))
-        await lg.send(f'Webhook protection was removed from the server by {ctx.author.mention}')
+        await lg.send(f'Webhook protection was removed from the server by {ctx.author}.')
         await ctx.respond("Webhook options disabled.", ephemeral=True)
 
 
