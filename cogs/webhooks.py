@@ -62,7 +62,7 @@ class Webhooks(commands.Cog):
 
         # attempt to delete all webhooks
         try:
-            await recent_webhook.delete(reason='Webhook protection')
+            await recent_webhook.delete(reason='Webhook protection.')
         except:
             embed = await self.bot.build_log_embed(0xe74c3c, recent_webhook.user, channel, '❌ FAILED TO DELETE - MISSING PERMISSIONS.')
             await log_channel.send(embed=embed)
@@ -77,13 +77,13 @@ class Webhooks(commands.Cog):
     @webhook_options.command()
     async def enable(self, 
     ctx,
-    code : Option(int,'Enter the 6-digit code on your authentication application',required=True),
+    code : Option(int,'Enter the 6-digit code on your authentication application.',required=True),
     verified_bots : Option(
         description="Allow verified bots?",
         choices = ['True','False']
     )):
         if ctx.author.id != self.bot.master_user:
-            await ctx.respond("You are not authorised to use this command.", ephemeral=True)
+            await ctx.respond("You are not authorized to use this command.", ephemeral=True)
             return
         if not db_handler.check_user(self.bot.CONN, ctx.author.id) or not db_handler.check_verified(self.bot.CONN, ctx.author.id) == 1:
             await ctx.respond("You do not have permission for this action.", ephemeral=True)
@@ -104,10 +104,10 @@ class Webhooks(commands.Cog):
 
     @commands.guild_only()
     @webhook_options.command()
-    async def disable(self, ctx, code : Option(int,'Enter the 6-digit code on your authentication application',required=True)):
+    async def disable(self, ctx, code : Option(int,'Enter the 6-digit code on your authentication application.',required=True)):
         # MASTER CHECK
         if ctx.author.id != self.bot.master_user:
-            await ctx.respond("You are not authorised to use this command.", ephemeral=True)
+            await ctx.respond("You are not authorized to use this command.", ephemeral=True)
             return
         if not db_handler.check_user(self.bot.CONN, ctx.author.id) or not db_handler.check_verified(self.bot.CONN, ctx.author.id) == 1:
             await ctx.respond("You do not have permission for this action.", ephemeral=True)
