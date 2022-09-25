@@ -138,7 +138,6 @@ async def announce(ctx,
         return
     # All is good!
     if announcement_channel.id not in [channel_id for channel_id in db_handler.get_channels(bot.CONN, ctx.guild.id)]:
-        print(announcement_channel)
         await ctx.respond("That channel is not a valid announcement channel. Talk to your server admin or auditor to have it set up properly.",ephemeral=True)
         return
     voice_channel_id = db_handler.get_event_channel(bot.CONN,guild_id)
@@ -152,7 +151,6 @@ async def announce(ctx,
             await ctx.respond("There is no log channel for this server.", ephemeral=True)
         if log_channel is not None:
             await log_channel.send(f"{ctx.author} has invoked the announce command for channel: {channel}.")
-        print(channel.overwrites)
         #Set the overwrites
         permissions_check.cancel()
         overwrite = discord.PermissionOverwrite()
@@ -350,7 +348,6 @@ async def panic_dangerous_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
     if not db_handler.check_guild(bot.CONN, guild_id):
         await ctx.respond("The guild is not set up yet. Run /setup_guild.", ephemeral=True)
         return
-    print(":D")
     log_channel = two_factor_helper.get_log_channel(bot, ctx.guild)
     if log_channel is None:
         await ctx.respond("I do not have permissions to write to the log channel, please fix this.", ephemeral = True)
@@ -452,7 +449,6 @@ async def permissions_check():
             log_id = db_handler.get_log_channel(bot.CONN, guild.id)
             log_channel = bot.get_channel(log_id)
             for channel in channels:
-                print(channel.overwrites)
                 for permissions in channel.overwrites:
                     if type(permissions) == discord.member.Member:
                         try:
@@ -487,7 +483,6 @@ async def reset(ctx, code : Option(int,'Enter the 6-digit code on your authentic
         await ctx.respond("Incorrect code given.",ephemeral=True)
         return
     user_id = member.id
-    print(user_id)
     if db_handler.check_user(bot.CONN,user_id):
         try:
             db_handler.delete_user(bot.CONN, user_id)
