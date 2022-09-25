@@ -55,7 +55,7 @@ class DiscordBot(discord.Bot):
 bot = DiscordBot()
 bot.load_extension("cogs.webhooks")
 
-@bot.command(description="Command used to start the 2fA pairing setup. Requires Authy/Google Authenticator.")
+@bot.command(description="Command used to start the 2FA pairing setup. Requires Authy/Google Authenticator.")
 async def setup(ctx):
     """
     The initial setup command.
@@ -63,25 +63,26 @@ async def setup(ctx):
     m_user = True if bot.master_user == ctx.author.id else False
     # Check if the user exists and do so accordingly
     if not db_handler.check_authorised(bot.CONN,info=(ctx.guild.id, ctx.author.id)) and not m_user:
-        await ctx.respond("You are not authorised to perform this command.", ephemeral = True)
+        await ctx.respond("You are not authorized to perform this command.", ephemeral = True)
         return
     if db_handler.check_user(bot.CONN, int(ctx.user.id)):
-        await ctx.respond("You are already registered in the 2fA system.", ephemeral=True)
+        await ctx.respond("You are already registered in the 2FA system.", ephemeral=True)
     else:
         delete_pngs.cancel()
         pngpath = two_factor_helper.setup_and_get_path(ctx, bot.CONN)
         pngfile = discord.File(pngpath)
 
         await ctx.respond("""
-Your information has been input.
-Scan the QR Code as shown below with Authy/Google Authenticator and type /verify [code] with the code currently shown via the authentication application used.
-Without using the /verify command, you will not be able to use the 2fA system fully.
+This message will self destruct in a couple minutes, please complete the following steps:
+1. Scan the QR Code using ONLY Authy or Google Authenticator. Never use your Discord Mobile App to scan a QR code.
+2. Type /verify [code] after scanning the QR code in your authenticator app. Enter the code listed for HQ-Announcements.
+3. Once you have used /verify sucessfully you can use all the other commands.
         """,file=pngfile, ephemeral=True)
         delete_pngs.start()
 
 @commands.cooldown(1, 5, commands.BucketType.user)
-@bot.command(description="Command used to verify a 2fA pairing setup.")
-async def verify(ctx, code : Option(int,'Enter the 6-digit code on your authentication application',required=True)):
+@bot.command(description="Command used to verify 2FA pairing setup.")
+async def verify(ctx, code : Option(int,'Enter the 6-digit code on your authentication application.',required=True)):
     if not db_handler.check_user(bot.CONN, ctx.author.id):
         await ctx.respond("You are not in the database for pending verification. Please use /setup to start.", ephemeral=True)
     else:
@@ -99,12 +100,12 @@ async def verify(ctx, code : Option(int,'Enter the 6-digit code on your authenti
 
 @commands.cooldown(1, announcement_wait, commands.BucketType.user)
 @commands.guild_only()
-@bot.command(description="Command used to gain the trusted role for a single announcements")
-async def announcement(ctx,
+@bot.command(description="Command to post announcements temporarily.")
+async def announce(ctx,
     announcement_channel : Option(
         discord.TextChannel,
-        'Enter the channel to authorise for.', required=True),
-    code : Option(int,'Enter the 6-digit code on your authentication application',required=True)):
+        'Enter the channel you would like to post in.', required=True),
+    code : Option(int,'Enter the 6-digit code on your authentication application.',required=True)):
     """
     Input:
     Context : discord.InteractionContext
@@ -123,10 +124,10 @@ async def announcement(ctx,
     # Is user authorised for this command?
 
     if not (db_handler.check_user(bot.CONN,int(member_id)) and db_handler.check_verified(bot.CONN,int(member_id)) == 1):
-        await ctx.respond("You are not authorised to perform this command.", ephemeral=True)
+        await ctx.respond("You are not authorized to perform this command.", ephemeral=True)
         return
     if not db_handler.check_authorised(bot.CONN,info=(guild_id,member_id)):
-        await ctx.respond("You are not authorised to perform this command.", ephemeral=True)
+        await ctx.respond("You are not authorized to perform this command.", ephemeral=True)
         return
     # Is verification code correct?
     if not two_factor_helper.verify_code(bot.CONN, ctx.author.id, code):
@@ -138,7 +139,7 @@ async def announcement(ctx,
     # All is good!
     if announcement_channel.id not in [channel_id for channel_id in db_handler.get_channels(bot.CONN, ctx.guild.id)]:
         print(announcement_channel)
-        await ctx.respond("Channel is not a valid announcements channel. Set it up with /insert_channel.",ephemeral=True)
+        await ctx.respond("That channel is not a valid announcement channel. Talk to your server admin or auditor to have it set up properly.",ephemeral=True)
         return
     voice_channel_id = db_handler.get_event_channel(bot.CONN,guild_id)
     log_channel_id = db_handler.get_log_channel(bot.CONN, guild_id)
@@ -147,7 +148,7 @@ async def announcement(ctx,
         channel = bot.get_channel(announcement_channel.id)
         vc_channel = bot.get_channel(voice_channel_id)
         log_channel = bot.get_channel(log_channel_id)
-        await log_channel.send(f"{ctx.author.mention} has invoked the announcements command for channel: {channel}.")
+        await log_channel.send(f"{ctx.author} has invoked the announce command for channel: {channel}.")
         print(channel.overwrites)
         #Set the overwrites
         permissions_check.cancel()
@@ -156,7 +157,7 @@ async def announcement(ctx,
         try: # Try set permissions
             await channel.set_permissions(ctx.author, overwrite=overwrite)
         except discord.Forbidden:
-            await ctx.respond("I do not have the correct permissions. Please ensure I have Administrator permissions.", ephemeral=True)
+            await ctx.respond("I do not have the correct permissions. Please contact your server admin or auditor for help.", ephemeral=True)
             return
         except HTTPException as e:
             await ctx.respond("There was an error when executing the command. HTTP Error Code: {}".format(str(e.code)))
@@ -167,19 +168,19 @@ async def announcement(ctx,
             await vc_channel.set_permissions(ctx.author, overwrite=vc_overwrite)
             await ctx.respond("Permissions granted.", ephemeral=True)
         except discord.Forbidden:
-            await ctx.respond("I do not have the correct permissions. Please ensure I have Administrator permissions.", ephemeral=True)
+            await ctx.respond("I do not have the correct permissions. Please contact your server admin or auditor for help.", ephemeral=True)
             return
         except HTTPException as e:
             await ctx.respond("There was an error when setting the manage_events permission. HTTP Error Code: {}".format(str(e.code)))
             return
-        await log_channel.send(f"{ctx.author.mention} has elevated permissions (Manage events, send messages in the announcements channel, mention everyone) for {str(announcement_wait)} seconds.")
+        await log_channel.send(f"{ctx.author} has elevated permissions (Manage events, send messages, and mention everyone in the announcements channel) for {str(announcement_wait)} seconds.")
         # Wait x seconds
         await asyncio.sleep(int(announcement_wait))
         # Rewrite the overwrites
         try:
             await channel.set_permissions(ctx.author, overwrite=None)
         except discord.Forbidden:
-            await ctx.respond("I do not have the correct permissions. Please ensure I have Administrator permissions.", ephemeral=True)
+            await ctx.respond("I do not have the correct permissions. Please contact your server admin or auditor for help.", ephemeral=True)
             return
         except HTTPException as e:
             await ctx.respond("There was an error when executing the command. HTTP Error Code: {}".format(str(e.code)))
@@ -187,24 +188,24 @@ async def announcement(ctx,
         try:
             await vc_channel.set_permissions(ctx.author, overwrite=None)
         except discord.Forbidden:
-                await ctx.respond("I do not have the correct permissions. Please ensure I have Administrator permissions.", ephemeral=True)
+                await ctx.respond("I do not have the correct permissions. Please contact your server admin or auditor for help.", ephemeral=True)
                 return
         except HTTPException as e:
             await ctx.respond("There was an error when executing the command. HTTP Error Code: {}".format(str(e.code)))
             return
         permissions_check.start()
-        await log_channel.send(f"{ctx.author.mention}'s permissions are now revoked.")
+        await log_channel.send(f"{ctx.author}'s permissions are now revoked.")
 
 # MASTER USER
 @commands.cooldown(1, 5, commands.BucketType.user)
 @commands.guild_only()
-@bot.command(description="Command used to gain the trusted role for a single announcements")
-async def authorise(ctx, member : Option(discord.Member, "User to authorise"), code : Option(int,'Enter the 6-digit code on your authentication application',required=True)):
+@bot.command(description="Authorize a member to use announce and lockdown.")
+async def auth(ctx, member : Option(discord.Member, "User to authorize:"), code : Option(int,'Enter the 6-digit code on your authentication application.',required=True)):
     """
     Takes a member option to authorise for /lockdown and /announcements.
     """
     if ctx.author.id != master_user:
-        await ctx.respond("You are not authorised to use this command.", ephemeral=True)
+        await ctx.respond("You are not authorized to use this command.", ephemeral=True)
         return
     # If user is not in the database and verified
     if not db_handler.check_user(bot.CONN, ctx.author.id) or not db_handler.check_verified(bot.CONN, ctx.author.id) == 1:
@@ -221,7 +222,7 @@ async def authorise(ctx, member : Option(discord.Member, "User to authorise"), c
         return
     # If user is not authorised
     elif db_handler.check_authorised(bot.CONN, (ctx.guild.id, member.id)):
-        await ctx.respond("The user is already authorised.", ephemeral=True)
+        await ctx.respond("The user is already authorized.", ephemeral=True)
     else:
         try:
             # Authorise Member
@@ -229,26 +230,26 @@ async def authorise(ctx, member : Option(discord.Member, "User to authorise"), c
             log = db_handler.get_log_channel(bot.CONN, ctx.guild.id)
             lg = bot.get_channel(log)
             try:
-                await lg.send(f'{member.mention} authorised for the server: {str(ctx.guild.id)}')
+                await lg.send(f'{member.mention} authorized for the server: {str(ctx.guild.id)}')
             except HTTPException:
-                await ctx.author.send("The bot has been set up accordingly, however I was unable to send a message to {} due to a connection issue.".format(lg))
+                await ctx.author.send("Member authorized, however I was unable to send a message to {} due to a connection issue.".format(lg))
             except discord.Forbidden:
-                await ctx.author.send("The bot has been set up, however I do not have permissions to post in log channel:{}. Please let me read/write messages there.".format(lg))
-            await ctx.respond(f'{member.name} authorised for guild: {str(ctx.guild.id)}', ephemeral=True)
+                await ctx.author.send("Member authorized, however I do not have permissions to post in log channel:{}. Please let me read/write messages there.".format(lg))
+            await ctx.respond(f'{member.name} authorized for guild: {str(ctx.guild.id)}', ephemeral=True)
         except Exception as e:
             # Catch exceptions
             print(e)
-            await ctx.respond(f"Error occured whilst authorising. Check console for details. {e}", ephemeral=True)
+            await ctx.respond(f"Error occured while authorizing. Check console for details. {e}", ephemeral=True)
 
 #MASTER USER CHECK
 @commands.cooldown(1, 5, commands.BucketType.user)
 @commands.guild_only()
-@bot.command(description="Command used to gain the trusted role for a single announcements")
+@bot.command(description="Initial setup command.")
 async def setup_guild(ctx, 
-            event_channel : Option(Union[discord.VoiceChannel, discord.StageChannel], "Voice used as a proxy for the 'manage events' permission."), 
-            announcement_channel : Option(discord.TextChannel, "Channel to listen in on for announcements"),
+            event_channel : Option(discord.VoiceChannel, "Voice channel used as a proxy for the 'manage events' permission."), 
+            announcement_channel : Option(discord.TextChannel, "Main announcement channel."),
             log_channel : Option(discord.TextChannel, "Channel for the bot to post logs in."),
-            code : Option(int,'Enter the 6-digit code on your authentication application',required=True),
+            code : Option(int,'Enter the 6-digit code on your authentication application.',required=True),
             ):
     """
     Takes a role, log, event and announcement channel and a verification code.
@@ -280,7 +281,7 @@ async def setup_guild(ctx,
                 return
             try:
                 if log_channel_id == channel_id:
-                    await ctx.respond("Log channel and announcement channel cannot be the same", ephemeral=True)
+                    await ctx.respond("Log channel and announcement channel cannot be the same.", ephemeral=True)
                     return
             # Try insert the guild into the guilds database
                 db_handler.insert_guild(bot.CONN, (guild_id,voice_id,channel_id, log_channel_id))
@@ -294,7 +295,7 @@ async def setup_guild(ctx,
                 try:
                     await lg.send(f"This server is now set up in {bot.user.name}'s database by {ctx.author.mention}.")
                 except HTTPException:
-                    await ctx.author.send("The bot has been set up accordingly, however I was unable to send a message to {} due to a connection issue.".format(lg))
+                    await ctx.author.send("The bot has been set up, however I was unable to send a message to {} due to a connection issue.".format(lg))
                 except discord.Forbidden:
                     await ctx.author.send("The bot has been set up, however I do not have permissions to post in log channel:{}. Please let me read/write messages there.".format(lg))
             except Exception as e:
@@ -302,13 +303,13 @@ async def setup_guild(ctx,
                 await ctx.respond("Unable to setup the guild.", ephemeral=True)
         else:
             # Incorrect 2fA code
-            await ctx.respond("You have supplied an incorrect 2fA code.", ephemeral=True)
+            await ctx.respond("You have supplied an incorrect 2FA code.", ephemeral=True)
 
 @commands.guild_only()
 @commands.cooldown(1, 5, commands.BucketType.user)
 @commands.bot_has_permissions(manage_roles = True, manage_webhooks = True, manage_guild = True, administrator = True)
-@bot.command(description="Lockdown the server (requires 2fA).")
-async def lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authentication application',required=True)):
+@bot.command(description="ONLY USE IF UNDER ATTACK. DO NOT TEST. WILL CAUSE DAMAGE TO SERVER.")
+async def panic_DANGEROUS_lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authentication application.',required=True)):
     """
         Phase 1: Remove list of dangerous perms from ALL roles:
     Phase 2:
@@ -327,10 +328,10 @@ async def lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authen
     # Check 1: Is guild registered
     # Is user authorised for this command?
     if not (db_handler.check_user(bot.CONN,int(member_id)) and db_handler.check_verified(bot.CONN,int(member_id)) == 1):
-        await ctx.respond("You are not authorised to perform this command.", ephemeral=True)
+        await ctx.respond("You are not authorized to perform this command.", ephemeral=True)
         return
     if not db_handler.check_authorised(bot.CONN,info=(guild_id,member_id)):
-        await ctx.respond("You are not authorised to perform this command.", ephemeral=True)
+        await ctx.respond("You are not authorized to perform this command.", ephemeral=True)
         return
     # Is verification code correct?
     if not two_factor_helper.verify_code(bot.CONN, ctx.author.id, code):
@@ -453,10 +454,10 @@ async def before_png_delete():
 #MASTER USER CHECK
 @commands.guild_only()
 @commands.cooldown(1, 5, commands.BucketType.user)
-@bot.command(description="Reset a user's 2fA")
-async def reset(ctx, code : Option(int,'Enter the 6-digit code on your authentication application',required=True), member : Option(discord.Member,'The member to reset (or yourself).', required=False, default=None)):
+@bot.command(description="Reset user's 2FA")
+async def reset(ctx, code : Option(int,'Enter the 6-digit code on your authentication application.',required=True), member : Option(discord.Member,'The member to reset (or yourself).', required=False, default=None)):
     if ctx.author.id != master_user:
-        await ctx.respond("You are not authorised to use this command.", ephemeral=True)
+        await ctx.respond("You are not authorized to use this command.", ephemeral=True)
         return
     if not db_handler.check_user(bot.CONN, ctx.author.id) or not db_handler.check_verified(bot.CONN, ctx.author.id) == 1:
         await ctx.respond("You do not have permission for this action.", ephemeral=True)
@@ -477,9 +478,9 @@ async def reset(ctx, code : Option(int,'Enter the 6-digit code on your authentic
 @commands.guild_only()
 @commands.cooldown(1, 5, commands.BucketType.user)
 @bot.command(description="Insert a channel into the database")
-async def insert_channel(ctx, announcement_channel : Option(discord.TextChannel,'Text channel to add to the announcement'),code : Option(int,'Enter the 6-digit code on your authentication application',required=True)):
+async def insert_channel(ctx, announcement_channel : Option(Union[discord.TextChannel,discord.VoiceChannel], 'Channel to add to the announcement channels list.'),code : Option(int,'Enter the 6-digit code on your authentication application.',required=True)):
     if ctx.author.id != master_user:
-        await ctx.respond("You are not authorised to use this command.", ephemeral=True)
+        await ctx.respond("You are not authorized to use this command.", ephemeral=True)
         return
     guild_id = ctx.guild.id
     if not db_handler.check_guild(bot.CONN, guild_id):
@@ -506,13 +507,13 @@ async def insert_channel(ctx, announcement_channel : Option(discord.TextChannel,
 @bot.command(description="Delete a channel from the database")
 async def delete_channel(ctx, 
     channel : Option(
-    discord.TextChannel,
+    Option(Union[discord.TextChannel,discord.VoiceChannel],
     'Channel to remove (Or channel ID if the channel no longer exists).'
     ),
-    code : Option(int,'Enter the 6-digit code on your authentication application', required=True)):
+    code : Option(int,'Enter the 6-digit code on your authentication application.', required=True)):
 
     if ctx.author.id != master_user:
-        await ctx.respond("You are not authorised to use this command.", ephemeral=True)
+        await ctx.respond("You are not authorized to use this command.", ephemeral=True)
         return
     guild_id = ctx.guild.id
     if not db_handler.check_guild(bot.CONN, guild_id):
@@ -537,9 +538,9 @@ async def delete_channel(ctx,
 @commands.guild_only()
 @commands.cooldown(1, 5, commands.BucketType.user)
 @bot.command(description="Remove the guild from the database.")
-async def remove_guild(ctx, code : Option(int,'Enter the 6-digit code on your authentication application',required=True)):
+async def remove_guild(ctx, code : Option(int,'Enter the 6-digit code on your authentication application.',required=True)):
     if ctx.author.id != master_user:
-        await ctx.respond("You are not authorised to use this command.", ephemeral=True)
+        await ctx.respond("You are not authorized to use this command.", ephemeral=True)
         return
     if not db_handler.check_user(bot.CONN, ctx.author.id) or not db_handler.check_verified(bot.CONN, ctx.author.id) == 1:
         await ctx.respond("You do not have permission for this action.", ephemeral=True)
@@ -561,7 +562,7 @@ async def remove_guild(ctx, code : Option(int,'Enter the 6-digit code on your au
 @bot.event
 async def on_application_command_error(ctx: discord.ApplicationContext, error: discord.DiscordException):
     if isinstance(error, commands.CommandOnCooldown):
-        await ctx.respond("This command has a 5 second cooldown.", ephemeral=True)
+        await ctx.respond("This command is on cooldown.", ephemeral=True)
     if isinstance(error, commands.BotMissingPermissions):
         await ctx.respond("I am missing permissions. I require administrator for my commands to work.", ephemeral=True)
 
