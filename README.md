@@ -9,3 +9,10 @@ With how many compromises there are for NFT Discord servers, giving the option f
 ## Upcoming Features
 
 Saving wiped permissions during a lockdown and allowing them to be restored later. For now, I recommend using this with Wick and using a Wick backup if a lockdown triggers.
+
+Slight fixes to global channel/guild perm checking.
+
+## Setup Tips
+
+Requires all intents when setting up the bot token
+
