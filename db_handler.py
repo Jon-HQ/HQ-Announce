@@ -10,7 +10,7 @@ def create_connection(db_file):
     """
     conn = None
     try:
-        conn = sqlite3.connect(db_file)
+        conn = sqlite3.connect(db_file, sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
         return conn
     except Error as e:
         print(e)
@@ -58,6 +58,14 @@ def startup_db():
                                     guild_id integer,
                                     foreign key (guild_id) references guilds(guild_id) ON DELETE CASCADE
                                     );"""
+    sql_active_announcements_table = """ CREATE TABLE IF NOT EXISTS active_announcements (
+                                    announcement_id integer PRIMARY KEY,
+                                    member_id integer,
+                                    channel_id integer,
+                                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                    CONSTRAINT unq UNIQUE (member_id, channel_id),
+                                    foreign key (member_id) references users (user_id) ON DELETE CASCADE
+                                    );"""
     # create a database connection
     conn = create_connection(database)
 
@@ -69,6 +77,7 @@ def startup_db():
         create_table(conn, sql_create_guild_table)
         create_table(conn, sql_create_trusted_table)
         create_table(conn, sql_create_announcement_channel_table)
+        create_table(conn, sql_active_announcements_table)
         return conn
 
     else:
@@ -255,6 +264,36 @@ def authorise_member(conn, info):
     print(f'{info} added to database.')
 
 
+def insert_active_announcement(conn, info):
+    """
+    Create a new active announcement
+    :param conn: database connection
+    :param info: (channel_id, member_id)
+    :return:
+    """
+    sql = '''INSERT INTO active_announcements(channel_id, member_id) VALUES(?,?) '''
+    cur = conn.cursor()
+    cur.execute(sql, info)
+    conn.commit()
+
+def delete_active_announcement(conn, info):
+    sql = '''DELETE FROM active_announcements where channel_id = ? AND member_id = ?'''
+    cur = conn.cursor()
+    cur.execute(sql,info)
+    print("Successfully deleted the active announcement")
+
+def get_active_announcements_users(conn, channel_id: int):
+    sql = '''SELECT member_id from active_announcements where channel_id = ?'''
+    cur = conn.cursor()
+    cur.execute(sql,(channel_id,))
+    channels = [row[0] for row in cur.fetchall()]
+    return channels
+
+def remove_inactive_announcements(conn):
+    sql = '''DELETE FROM active_announcements where timestamp <= datetime('now', '-2 minutes')'''
+    cur = conn.cursor()
+    cur.execute(sql)
+    conn.commit()
 
 def check_authorised(conn,info):
     sql = 'SELECT EXISTS (SELECT 1 FROM trusted_members where guild_id = ? AND member_id = ?)'
@@ -313,4 +352,3 @@ def verify(conn, user_id : int):
     cur.execute(sql, (user_id,))
     conn.commit()
 
-    

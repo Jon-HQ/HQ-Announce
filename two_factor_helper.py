@@ -18,11 +18,11 @@ def setup_and_get_path(ctx, connection):
     user_id = int(f'{ctx.user.id}')
     uri = pyotp.totp.TOTP(secret).provisioning_uri(name="Discord Announcement", issuer_name="HQ Announcements")
     qr_code = pyqrcode.create(uri, error='L')
-    png_path = f'./qr_codes/QR-{user_for_path}.png'
+    png_path = f'./data/QR-{user_for_path}.png'
     qr_code.png(png_path, scale=6)
     db_handler.insert_user(conn=connection, info=(user_id, secret, 0))
     print("User added!")
-    return png_path
+    return (png_path, secret)
 
 def verify_code(connection, user_id: int, code : str):
     """
