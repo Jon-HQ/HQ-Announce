@@ -12,6 +12,8 @@ import asyncio
 import os
 from discord.ext import tasks
 from typing import Union
+import datetime
+import sqlite3
 with open('./data/config.json', 'r') as f:
     config = json.load(f)
 
@@ -24,6 +26,7 @@ class DiscordBot(discord.Bot):
         intents.members = True
         intents.guilds = True
         intents.webhooks = True
+        intents.scheduled_events = True
         intents.messages = True
         super().__init__(intents = intents)
 
@@ -36,6 +39,7 @@ class DiscordBot(discord.Bot):
         else:
             print("DB Connected")
         delete_pngs.start()
+        remove_active_announcements.start()
         permissions_check.start()
         self.master_user = config['master_user_id']
 
@@ -69,7 +73,7 @@ async def setup(ctx):
         await ctx.respond("You are already registered in the 2FA system.", ephemeral=True)
     else:
         delete_pngs.cancel()
-        pngpath = two_factor_helper.setup_and_get_path(ctx, bot.CONN)
+        pngpath, secret = two_factor_helper.setup_and_get_path(ctx, bot.CONN)
         pngfile = discord.File(pngpath)
 
         await ctx.respond("""
@@ -77,7 +81,9 @@ This message will self destruct in a couple minutes, please complete the followi
 1. Scan the QR Code using ONLY Authy or Google Authenticator. Never use your Discord Mobile App to scan a QR code.
 2. Type /verify [code] after scanning the QR code in your authenticator app. Enter the code listed for HQ-Announcements.
 3. Once you have used /verify sucessfully you can use all the other commands.
-        """,file=pngfile, ephemeral=True)
+
+To activate without scanning the QR Code, enter the following setup key as a "time-based otp": {}
+        """.format(secret),file=pngfile, ephemeral=True)
         delete_pngs.start()
 
 @commands.cooldown(1, 5, commands.BucketType.user)
@@ -98,14 +104,14 @@ async def verify(ctx, code : Option(int,'Enter the 6-digit code on your authenti
         elif verification == 1:
             await ctx.respond("You are already verified.", ephemeral=True)
 
-@commands.cooldown(1, announcement_wait, commands.BucketType.user)
+@commands.cooldown(1, 5, commands.BucketType.user)
 @commands.guild_only()
 @bot.command(description="Command to post announcements temporarily.")
 async def announce(ctx,
     announcement_channel : Option(
         discord.TextChannel,
         'Enter the channel you would like to post in.', required=True),
-    code : Option(int,'Enter the 6-digit code on your authentication application.',required=True)):
+    code : Option(int,'Enter the 6-digit code on your authentication application.', required=True)):
     """
     Input:
     Context : discord.InteractionContext
@@ -149,10 +155,14 @@ async def announce(ctx,
         log_channel = bot.get_channel(log_channel_id)
         if log_channel is None:
             await ctx.respond("There is no log channel for this server.", ephemeral=True)
+        try:
+            db_handler.insert_active_announcement(bot.CONN, (announcement_channel.id, member_id))
+        except sqlite3.IntegrityError as e:
+            await ctx.respond("You already have permissions for this channel.", ephemeral=True)
+            return
         if log_channel is not None:
             await log_channel.send(f"{ctx.author} has invoked the announce command for channel: {channel}.")
         #Set the overwrites
-        permissions_check.cancel()
         overwrite = discord.PermissionOverwrite()
         overwrite.send_messages = overwrite.mention_everyone = True
         try: # Try set permissions
@@ -195,7 +205,8 @@ async def announce(ctx,
         except HTTPException as e:
             await ctx.respond("There was an error when executing the command. HTTP Error Code: {}".format(str(e.code)))
             return
-        permissions_check.start()
+        # Delete from database
+        db_handler.delete_active_announcement(bot.CONN, (announcement_channel.id, member_id))
         if log_channel is not None:
             await log_channel.send(f"{ctx.author}'s permissions are now revoked.")
         else:
@@ -315,7 +326,7 @@ async def setup_guild(ctx,
 
 @commands.guild_only()
 @commands.cooldown(1, 5, commands.BucketType.user)
-@commands.bot_has_permissions(manage_roles = True, manage_webhooks = True, manage_guild = True, administrator = True)
+@commands.bot_has_permissions(manage_roles = True, manage_webhooks = True, manage_guild = True, administrator = True, manage_events = True)
 @bot.command(description="ONLY USE IF UNDER ATTACK. DO NOT TEST. WILL CAUSE DAMAGE TO SERVER.")
 async def panic_dangerous_lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authentication application.',required=True)):
     """
@@ -358,7 +369,8 @@ async def panic_dangerous_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
     webhooks = [webhook for webhook in await ctx.guild.webhooks()]
     channels = ctx.guild.channels
     num_wh = len(webhooks)
-    wh_status = role_status = override_status = 0
+    num_se = len(ctx.guild.scheduled_events)
+    wh_status = role_status = override_status = se_status = 0
     # Go through the roles and adjust the permissions. Step 1.
     #
     """
@@ -407,7 +419,24 @@ async def panic_dangerous_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
                     await log_channel.send(f'I do not have permissions to delete {webhook}. Please ensure I have "Administrator" privileges and that I can manage roles.')
                 ctx.respond(f'I do not have permissions to delete {webhook}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
         """
-        Finally go through each text channel and change any overrides to view as False.
+        Go through each event and remove them.
+        """
+        events = await ctx.guild.fetch_scheduled_events()
+        for event in events:
+            try:
+                await event.delete()
+            except HTTPException as e:
+                se_status += 1
+                if log_channel is None:
+                    await log_channel.send(f'HTTP Error encountered when attempting to delete {event}. Status code: {str(e.staus)}. Reason: {e.text}')
+                ctx.respond(f'HTTP Error encountered when attempting to delete {event}. Status code: {str(e.staus)}. Reason: {e.text}', ephemeral=True)
+            except discord.Forbidden:
+                se_status += 1
+                if log_channel is None:
+                    await log_channel.send(f'I do not have permissions to delete {event}. Please ensure I have "Administrator" privileges and that I can manage roles.')
+                ctx.respond(f'I do not have permissions to delete {event}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
+        """
+        Go through each text channel and change any overrides to view as False.
         """
         default_role = ctx.guild.default_role
         perms = {'view_channel': False, 'send_messages': False}
@@ -427,16 +456,16 @@ async def panic_dangerous_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
                 ctx.respond(f'I do not have permissions to edit {channel}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
         await asyncio.sleep(5)
     if log_channel is not None:
-        await log_channel.send(f"Server is now locked down. Edited {len(roles)} roles ({role_status} errors), {str(num_wh)} webhooks ({wh_status} errors) and {len(channels)} channels ({override_status} errors)")
+        await log_channel.send(f"Server is now locked down. Edited {len(roles)} roles ({role_status} errors), {str(num_wh)} webhooks ({wh_status} errors), {str(num_se)} ({se_status} errors) and {len(channels)} channels ({override_status} errors)")
     else:
-        await ctx.respond(f"Server is now locked down. Edited {len(roles)} roles ({role_status} errors), {str(num_wh)} webhooks ({wh_status} errors) and {len(channels)} channels ({override_status} errors)", ephemeral = True)
+        await ctx.respond(f"Server is now locked down. Edited {len(roles)} roles ({role_status} errors), {str(num_wh)} webhooks ({wh_status} errors), {str(num_se)} ({se_status} errors) and {len(channels)} channels ({override_status} errors)", ephemeral = True)
 
 @tasks.loop(minutes=1)
 async def delete_pngs():
     """
     Get rid of all QR codes every minute.
     """
-    path_dir = f'./qr_codes/'
+    path_dir = f'./data/'
     for images in os.listdir(path_dir):
         if images.endswith(".png"):
             os.remove(os.path.join(path_dir, images))
@@ -449,13 +478,30 @@ async def permissions_check():
             log_id = db_handler.get_log_channel(bot.CONN, guild.id)
             log_channel = bot.get_channel(log_id)
             for channel in channels:
+                active_announcements = db_handler.get_active_announcements_users(bot.CONN, channel.id)
                 for permissions in channel.overwrites:
                     if type(permissions) == discord.member.Member:
-                        try:
-                            await channel.set_permissions(permissions, overwrite=None)
-                            print(f"{permissions} had permissions. Removed.")
-                        except discord.Forbidden:
-                            await log_channel.send(f"Error occured when attempting to clear permissions from channel: {channel}. Please check permissions.")
+                        if permissions.id in active_announcements:
+                            continue
+                        else:
+                            try:
+                                await channel.set_permissions(permissions, overwrite=None)
+                                print(f"{permissions} had permissions. Removed.")
+                            except discord.Forbidden:
+                                if log_channel is not None:
+                                    await log_channel.send(f"Error occured when attempting to clear permissions from channel: {channel}. Please check permissions.")
+
+@tasks.loop(minutes=announcement_wait)
+async def remove_active_announcements():
+    """
+    Remove 
+    """
+    now = datetime.datetime.now()
+    cut_off = now - datetime.timedelta(minutes=2)
+    db_handler.remove_inactive_announcements(bot.CONN)
+    print(":)")
+
+
 @permissions_check.before_loop
 async def before_perms_check():
     print('Waiting for bot to be ready to start permissions loop.')
@@ -580,7 +626,8 @@ async def remove_guild(ctx, code : Option(int,'Enter the 6-digit code on your au
 @bot.event
 async def on_application_command_error(ctx: discord.ApplicationContext, error: discord.DiscordException):
     if isinstance(error, commands.CommandOnCooldown):
-        await ctx.respond("This command is on cooldown.", ephemeral=True)
+        await ctx.respond("This command is on cooldown for {} seconds.".format(str(
+            round(error.retry_after))), ephemeral=True)
     if isinstance(error, commands.BotMissingPermissions):
         await ctx.respond("I am missing permissions. I require administrator for my commands to work.", ephemeral=True)
 
