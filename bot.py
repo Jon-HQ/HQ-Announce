@@ -324,12 +324,12 @@ async def setup_guild(ctx,
             # Incorrect 2fA code
             await ctx.respond("You have supplied an incorrect 2FA code.", ephemeral=True)
 
-@commands.guild_only()
+"""@commands.guild_only()
 @commands.cooldown(1, 5, commands.BucketType.user)
 @commands.bot_has_permissions(manage_roles = True, manage_webhooks = True, manage_guild = True, administrator = True, manage_events = True)
 @bot.command(description="ONLY USE IF UNDER ATTACK. DO NOT TEST. WILL CAUSE DAMAGE TO SERVER.")
 async def panic_dangerous_lockdown(ctx, code : Option(int,'Enter the 6-digit code on your authentication application.',required=True)):
-    """
+    """"""
         Phase 1: Remove list of dangerous perms from ALL roles:
     Phase 2:
     Remove all webhooks (just in case)
@@ -337,7 +337,7 @@ async def panic_dangerous_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
     Each channel, go through each override, and set EVERY override to deny view
     this will make it so no one can manage channels to make it so people can see channels again
     without damanging the server way too much
-    """
+    """"""
     guild_id = ctx.guild.id
     member_id = ctx.author.id
     guild_name = ctx.guild.name
@@ -373,10 +373,10 @@ async def panic_dangerous_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
     wh_status = role_status = override_status = se_status = 0
     # Go through the roles and adjust the permissions. Step 1.
     #
-    """
+    """"""
     Go through the roles and update the permissions to have the dangerous permissions removed.
     It will ignore the bot's role and any roles that are above the bot's role.
-    """
+    """"""
     await ctx.respond(f"Lockdown activated by {ctx.author} (ID: {ctx.author.id})", ephemeral=True)
     if log_channel is not None:
         await log_channel.send(f"Lockdown activated by {ctx.author} (ID: {ctx.author.id})")
@@ -401,9 +401,7 @@ async def panic_dangerous_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
                         if log_channel is None:
                             await log_channel.send(f'I do not have permissions to overwrite {role}. Please ensure I have "Administrator" privileges and that I can manage roles.')
                         ctx.respond(f'I do not have permissions to overwrite {role}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
-        """
-        Go through and delete each webhook.
-        """
+
         for webhook in webhooks:
             try:
                 # Delete the webhook
@@ -418,9 +416,7 @@ async def panic_dangerous_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
                 if log_channel is None:
                     await log_channel.send(f'I do not have permissions to delete {webhook}. Please ensure I have "Administrator" privileges and that I can manage roles.')
                 ctx.respond(f'I do not have permissions to delete {webhook}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
-        """
-        Go through each event and remove them.
-        """
+
         events = await ctx.guild.fetch_scheduled_events()
         for event in events:
             try:
@@ -435,9 +431,7 @@ async def panic_dangerous_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
                 if log_channel is None:
                     await log_channel.send(f'I do not have permissions to delete {event}. Please ensure I have "Administrator" privileges and that I can manage roles.')
                 ctx.respond(f'I do not have permissions to delete {event}. Please ensure I have "Administrator" privileges and that I can manage roles.', ephemeral = True)
-        """
-        Go through each text channel and change any overrides to view as False.
-        """
+
         default_role = ctx.guild.default_role
         perms = {'view_channel': False, 'send_messages': False}
         new_overwrites = {default_role: discord.PermissionOverwrite(**perms)}
@@ -459,7 +453,7 @@ async def panic_dangerous_lockdown(ctx, code : Option(int,'Enter the 6-digit cod
         await log_channel.send(f"Server is now locked down. Edited {len(roles)} roles ({role_status} errors), {str(num_wh)} webhooks ({wh_status} errors), {str(num_se)} ({se_status} errors) and {len(channels)} channels ({override_status} errors)")
     else:
         await ctx.respond(f"Server is now locked down. Edited {len(roles)} roles ({role_status} errors), {str(num_wh)} webhooks ({wh_status} errors), {str(num_se)} ({se_status} errors) and {len(channels)} channels ({override_status} errors)", ephemeral = True)
-
+"""
 @tasks.loop(minutes=1)
 async def delete_pngs():
     """
