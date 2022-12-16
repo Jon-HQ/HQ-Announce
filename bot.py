@@ -109,7 +109,7 @@ async def verify(ctx, code : Option(int,'Enter the 6-digit code on your authenti
 @bot.command(description="Command to post announcements temporarily.")
 async def announce(ctx,
     announcement_channel : Option(
-        discord.TextChannel,
+        discord.abc.GuildChannel,
         'Enter the channel you would like to post in.', required=True),
     code : Option(int,'Enter the 6-digit code on your authentication application.', required=True)):
     """
@@ -266,7 +266,7 @@ async def auth(ctx, member : Option(discord.Member, "User to authorize:"), code 
 @bot.command(description="Initial setup command.")
 async def setup_guild(ctx, 
             event_channel : Option(discord.VoiceChannel, "Voice channel used as a proxy for the 'manage events' permission."), 
-            announcement_channel : Option(discord.TextChannel, "Main announcement channel."),
+            announcement_channel : Option(discord.abc.GuildChannel, "Main announcement channel."),
             log_channel : Option(discord.TextChannel, "Channel for the bot to post logs in."),
             code : Option(int,'Enter the 6-digit code on your authentication application.',required=True),
             ):
@@ -534,7 +534,7 @@ async def reset(ctx, code : Option(int,'Enter the 6-digit code on your authentic
 @commands.guild_only()
 @commands.cooldown(1, 5, commands.BucketType.user)
 @bot.command(description="Insert a channel into the database")
-async def insert_channel(ctx, announcement_channel : Option(Union[discord.TextChannel,discord.VoiceChannel], 'Channel to add to the announcement channels list.'),code : Option(int,'Enter the 6-digit code on your authentication application.',required=True)):
+async def insert_channel(ctx, announcement_channel : Option(discord.abc.GuildChannel, 'Channel to add to the announcement channels list.'),code : Option(int,'Enter the 6-digit code on your authentication application.',required=True)):
     if ctx.author.id != master_user:
         await ctx.respond("You are not authorized to use this command.", ephemeral=True)
         return
